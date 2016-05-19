@@ -6,21 +6,17 @@
 #include <Vect.h>
 #include <Color.h>
 #include <vector>
-#include <Transform.h>
 
 class Sphere : public Object {
     Vect center;
     double radius;
     Color color;
-    std::vector<Transform*> transforms;
 
 public:
 
     Sphere ();
 
     Sphere (Vect, double, Color);
-
-    Sphere (Vect, double, Color, std::vector<Transform*>);
 
     // method functions
     Vect getCenter () { return center; }
@@ -38,12 +34,6 @@ public:
         Vect ray_origin = ray.getRayOrigin();
         Vect ray_direction = ray.getRayDirection();
         Vect sphere_center = center;
-        for (int i = transforms.size()-1 ; i >= 0 ; i--) {
-            //Transform* transform = transforms[i];
-            //ray_origin = transform->inverse()->apply(ray_origin);
-            //ray_direction = transform->inverse()->apply(ray_direction);
-            //center = transform->apply(center);
-        }
 
         double ray_origin_x = ray_origin.getVectX();
         double ray_origin_y = ray_origin.getVectY();
@@ -102,19 +92,6 @@ Sphere::Sphere (Vect center, double radius, Color color) {
     this->center = center;
     this->radius = radius;
     this->color = color;
-}
-
-Sphere::Sphere (Vect center, double radius, Color color, std::vector<Transform*> transforms) {
-    for (int i = transforms.size()-1 ; i >= 0 ; i--) {
-        Transform* transform = transforms[i];
-        //ray_origin = transform->inverse()->apply(ray_origin);
-        //ray_direction = transform->inverse()->apply(ray_direction);
-        center = transform->apply(center);
-    }
-    this->center = center;
-    this->radius = radius;
-    this->color = color;
-    this->transforms = transforms;
 }
 
 #endif

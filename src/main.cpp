@@ -21,10 +21,6 @@
 #include <Sphere.h>
 #include <Plane.h>
 #include <Triangle.h>
-#include <Transform.h>
-#include <Scale.h>
-#include <Rotate.h>
-#include <Translate.h>
 
 #if defined __linux__ || defined __APPLE__
 // "Compiled for Linux
@@ -46,18 +42,12 @@ static int WIDTH = 640, HEIGHT = 480, DPI = 72;
 static int MAXDEPTH = 5, AADEPTH = 1;
 // Vectors that define the camera
 static Vect LOOKFROM, LOOKAT, UP;
-// The field of view
-static double FOV = 30;
 // Outfile's name
 static string OUTFILE;
 // The camera object
 static Camera SCENE_CAM;
-// Transformations
-static vector<Transform*> TRANSFORMS;
 // This tracks the currently active colour within the inputfile
 static Color CURRENT_COLOR;
-static AttenuationType CURRENT_ATTENUATION = AttenuationType(1, 0, 0);
-
 
 void savebmp (const char *filename, int w, int h, RGBType *data) {
     FILE *f;
@@ -158,7 +148,6 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
     Object* winning_object = scene_objects.at(index_of_winning_object);
     Vect winning_object_normal = winning_object->getNormalAt(intersection_position);
     Color winning_object_color = winning_object->getColor();
-    RGBType final_color = winning_object_color.getAmbient() + winning_object_color.getEmission();
 
     // Checkerboard pattern
     if (winning_object_color.getSpecial() == 2.0) {
@@ -177,6 +166,8 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
             winning_object_color.setBlue(1);
         }
     }
+
+    RGBType final_color = winning_object_color.getDiffuse() * ambientlight;
 
     // Reflections
     if (recursion_depth < MAXDEPTH && winning_object_color.getSpecial() > 0 && winning_object_color.getSpecial() <= 1) {
@@ -208,8 +199,8 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
 
             IndexedDouble winning_object_with_reflection_multiplier = winningObjectMultiplier(reflection_intersections);
             Vect reflection_intersection_position = intersection_position
-            .add(reflection_direction
-            .mult(winning_object_with_reflection_multiplier.value));
+                                                        .add(reflection_direction
+                                                            .mult(winning_object_with_reflection_multiplier.value));
             Vect reflection_intersection_ray_direction = reflection_direction;
 
             // Recursive call
@@ -221,7 +212,7 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
                                                                ambientlight,
                                                                light_sources,
                                                                recursion_depth + 1
-            );
+                                                              );
             final_color += reflection_intersection_color * winning_object_color.getSpecial();
         }
     // End of reflections
@@ -231,7 +222,6 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
     for (int light_index = 0; light_index < light_sources.size() ; light_index++) {
         Source* light = light_sources.at(light_index);
         Vect light_direction = light->getPosition().add(intersection_position.negative()).normalise();
-        Vect half_angle_vector = light_direction.add(intersecting_ray_direction.negative()).normalise();
 
         float cosine_angle = winning_object_normal.dot(light_direction);
 
@@ -260,17 +250,9 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
             }
 
             if (shadowed == false) {
-                //final_color = final_color.add(winning_object_color.multiply(light_sources.at(light_index)->getColor().scale(cosine_angle)));
-                double light_scale= (light->getColor().getDiffuse().brightness() /
-                                         (light->getAttenuationConstant() +
-                                          light->getAttenuationLinear() * distance_to_light_magnitude +
-                                          light->getAttenuationQuadratic() * distance_to_light_magnitude * distance_to_light_magnitude));
-                RGBType diffuse_contribution = winning_object_color.getDiffuse() * fmax(winning_object_normal.dot(light_direction), 0);
-                RGBType specular_contribution = winning_object_color.getSpecular() * pow(fmax(winning_object_normal.dot(half_angle_vector), 0), winning_object_color.getShine());
-                final_color += (diffuse_contribution + specular_contribution) * light_scale;
+                final_color = final_color + winning_object_color.getDiffuse() * (light_sources.at(light_index)->getColor().getDiffuse() * cosine_angle);
 
-                /*if (winning_object_color.getSpecial() > 0 && winning_object_color.getSpecial() <= 1) {
-                    // special \in [0,1]
+                if (winning_object_color.getSpecial() > 0 && winning_object_color.getSpecial() <= 1) {
                     double dot1 = winning_object_normal.dot(intersecting_ray_direction.negative());
                     Vect scalar1 = winning_object_normal.mult(dot1);
                     Vect add1 = scalar1.add(intersecting_ray_direction);
@@ -281,9 +263,9 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
                     double specular = reflection_direction.dot(light_direction);
                     if (specular > 0) {
                         specular = pow(specular, 10);
-                        final_color = final_color.add(light_sources.at(light_index)->getColor().scale(specular*winning_object_color.getSpecial()));
+                        final_color = final_color + (light_sources.at(light_index)->getColor().getDiffuse() * (specular*winning_object_color.getSpecial()));
                     }
-                }*/
+                }
             }
         }
     }
@@ -298,7 +280,6 @@ RGBType* raytrace (vector<Source*> light_sources, vector<Object*> scene_objects)
     double aspectratio = (double) WIDTH / (double) HEIGHT;
     double ambientlight = 0.2;
     double accuracy = 0.000001;
-    double angle = tan(M_PI * 0.5 * FOV / 180.);
 
 
     RGBType *pixels = new RGBType[n];
@@ -445,6 +426,10 @@ void readSceneFile(int argc, char* argv[], vector<Source*> *light_sources,
             ss >> WIDTH >> HEIGHT;
             continue;
         }
+        if ( op.compare("dpi") == 0) {
+            ss >> DPI;
+            continue;
+        }
         if ( op.compare("output") == 0) {
             ss >> OUTFILE;
             continue;
@@ -465,7 +450,6 @@ void readSceneFile(int argc, char* argv[], vector<Source*> *light_sources,
             LOOKAT = Vect(x, y, z);
             ss >> x >> y >> z;
             UP = Vect(x, y, z);
-            ss >> FOV;
 
             Vect camdir = LOOKFROM.negative()
                                   .add(LOOKAT)
@@ -484,30 +468,12 @@ void readSceneFile(int argc, char* argv[], vector<Source*> *light_sources,
             Color color = Color(r, g, b, 0.0);
             Vect position = Vect(x, y, z);
             Light* light = new Light(position, color);
-            light->setAttenuation(CURRENT_ATTENUATION);
             light_sources->push_back(dynamic_cast<Source*>(light));
-            continue;
-        }
-        if ( op.compare("directional") == 0 ) {
-            // For now directional lights are simply point lights with constant attenuation.
-            double x, y, z, r, g, b;
-            ss >> x >> y >> z >> r >> g >> b;
-            Color color = Color(r, g, b, 0.0);
-            Vect position = Vect(x, y, z);
-            Light* light = new Light(position, color);
-            light_sources->push_back(dynamic_cast<Source*>(light));
-            continue;
-        }
-        if ( op.compare("attenuation") == 0 ) {
-            ss >> CURRENT_ATTENUATION.constant
-               >> CURRENT_ATTENUATION.linear
-               >> CURRENT_ATTENUATION.quadratic;
             continue;
         }
         if ( op.compare("ambient") == 0 ) {
             RGBType ambient;
             ss >> ambient.r >> ambient.g >> ambient.b;
-            CURRENT_COLOR.setAmbient(ambient);
             continue;
         }
         // END LIGHTS
@@ -518,8 +484,7 @@ void readSceneFile(int argc, char* argv[], vector<Source*> *light_sources,
             ss >> x >> y >> z >> radius;
             Sphere* sphere = new Sphere( Vect(x, y, z),
                                          radius,
-                                         CURRENT_COLOR,
-                                         TRANSFORMS);
+                                         CURRENT_COLOR);
             scene_objects->push_back(dynamic_cast<Object*>(sphere));
             continue;
         }
@@ -536,7 +501,6 @@ void readSceneFile(int argc, char* argv[], vector<Source*> *light_sources,
             Triangle* tri = new Triangle(*vertices->at(v1),
                                          *vertices->at(v2),
                                          *vertices->at(v3),
-                                         TRANSFORMS,
                                          CURRENT_COLOR);
             scene_objects->push_back(dynamic_cast<Object*>(tri));
             continue;
@@ -551,18 +515,6 @@ void readSceneFile(int argc, char* argv[], vector<Source*> *light_sources,
         // END SCENE OBJECTS
 
         // COLOUR
-        if ( op.compare("emission") == 0 ) {
-            RGBType emission;
-            ss >> emission.r >> emission.g >> emission.b;
-            CURRENT_COLOR.setEmission(emission);
-            continue;
-        }
-        if ( op.compare("specular") == 0 ) {
-            RGBType specular;
-            ss >> specular.r >> specular.g >> specular.b;
-            CURRENT_COLOR.setSpecular(specular);
-            continue;
-        }
         if ( op.compare("diffuse") == 0 ) {
             RGBType diffuse;
             ss >> diffuse.r >> diffuse.g >> diffuse.b;
@@ -584,35 +536,6 @@ void readSceneFile(int argc, char* argv[], vector<Source*> *light_sources,
             continue;
         }
         // END COLOUR
-
-        // TRANSFORMATIONS
-        if ( op.compare("popTransform") == 0 ) {
-            // TODO Thou shalt beware of memory leaks
-            TRANSFORMS.clear();
-            continue;
-        }
-        if ( op.compare("translate") == 0 ) {
-            double x, y, z;
-            ss >> x >> y >> z;
-            Translate* translation = new Translate(x, y, z);
-            TRANSFORMS.push_back(dynamic_cast<Transform*>(translation));
-            continue;
-        }
-        if ( op.compare("scale") == 0 ) {
-            double x, y, z;
-            ss >> x >> y >> z;
-            Scale* scale = new Scale(x, y, z);
-            TRANSFORMS.push_back(dynamic_cast<Transform*>(scale));
-            continue;
-        }
-        if ( op.compare("rotate") == 0 ) {
-            double x, y, z, angle;
-            ss >> x >> y >> z >> angle;
-            Rotate* rotation = new Rotate(x, y, z, angle);
-            TRANSFORMS.push_back(dynamic_cast<Transform*>(rotation));
-            continue;
-        }
-        // END TRANSFORMATIONS
     }
 
     sceneFile.close();

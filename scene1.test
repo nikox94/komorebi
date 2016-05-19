@@ -1,32 +1,26 @@
 size 640 480
-camera 3 1.5 -4 0 0 0 0 1 0 45
+camera 3 1.5 -4 0 0 0 0 1 0
 output scene1.test.bmp
 
 maxdepth 5
-aadepth 4
+aadepth 1
 
 point -7 10 -10 1 1 1
 
-ambient 0 0 0
-specular 0 0 0
+ambient 0.2
 diffuse 0.5 1 0.5
 special 0.3
-emission 0 0 0
 
 sphere 0 0 0 1
 
-ambient 0 0 0
-specular 0 0 0
+ambient 0.2
 diffuse 1 0 0
 special 0.9
-emission 0 0 0
 
 sphere 0 0 5 1
 
-ambient 0 0 0
-specular 0 0 0
+ambient 0.2
 diffuse 1 1 0
 special 2
-emission 0 0 0
 
 plane 0 1 0 -1

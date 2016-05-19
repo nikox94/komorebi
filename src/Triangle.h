@@ -6,7 +6,6 @@
 #include <Object.h>
 #include <Vect.h>
 #include <Color.h>
-#include <Transform.h>
 
 using namespace std;
 
@@ -20,7 +19,6 @@ public:
 
     Triangle (Vect, Vect, Vect, Color);
 
-    Triangle (Vect, Vect, Vect, vector<Transform*>, Color);
 
     // method functions
     Vect getAC() {
@@ -111,20 +109,6 @@ Triangle::Triangle () {
 }
 
 Triangle::Triangle (Vect A, Vect B, Vect C, Color color) {
-    this->A = A;
-    this->B = B;
-    this->C = C;
-    this->color = color;
-}
-
-Triangle::Triangle (Vect A, Vect B, Vect C, vector<Transform*> transformations, Color color) {
-    while (!transformations.empty()){
-        Transform* transform = transformations.back();
-        A = transform->apply(A);
-        B = transform->apply(B);
-        C = transform->apply(C);
-        transformations.pop_back();
-    }
     this->A = A;
     this->B = B;
     this->C = C;
