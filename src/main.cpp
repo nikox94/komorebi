@@ -23,7 +23,7 @@
 #include <Triangle.h>
 
 #if defined __linux__ || defined __APPLE__
-// "Compiled for Linux
+// Compiled for Linux
 #else
 // Windows doesn't define these values by default, Linux does
 #define M_PI 3.141592653589793
@@ -39,15 +39,23 @@ struct IndexedDouble {
 
 // These are external variables to be used in the program
 static int WIDTH = 640, HEIGHT = 480, DPI = 72;
-static int MAXDEPTH = 5, AADEPTH = 1;
+// Recursion depth
+static int MAXDEPTH = 5;
+// Anti-aliasing depth
+static int AADEPTH = 1;
+// The machine-precision accuracy (for comparing doubles)
+static double ACCURACY = 1E-6;
 // Vectors that define the camera
 static Vect LOOKFROM, LOOKAT, UP;
-// Outfile's name
+// Output file's name
 static string OUTFILE;
 // The camera object
 static Camera SCENE_CAM;
-// This tracks the currently active colour within the inputfile
+// This tracks the currently active color within the inputfile
+// This is how different colors are assigned to objects
 static Color CURRENT_COLOR;
+// This tracks the ambient light value for the current scene
+static double AMBIENTLIGHT = 0.2;
 
 void savebmp (const char *filename, int w, int h, RGBType *data) {
     FILE *f;
@@ -60,23 +68,23 @@ void savebmp (const char *filename, int w, int h, RGBType *data) {
 
     int ppm = DPI*m;
 
-    unsigned char bmpfileheader[14] = {'B', 'M', 0, 0, 0, 0,  0, 0, 0, 0,  54, 0, 0, 0};
-    unsigned char bmpinfoheader[40] = {40,0,0,0, 0,0,0,0, 0,0,0,0, 1,0,24,0};
+    unsigned char bmpfileheader[14] = {'B', 'M', 0, 0, 0, 0, 0, 0, 0, 0, 54, 0, 0, 0};
+    unsigned char bmpinfoheader[40] = {40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 24, 0};
 
-    bmpfileheader[ 2] = (unsigned char)(filesize);
-    bmpfileheader[ 3] = (unsigned char)(filesize>>8);
-    bmpfileheader[ 4] = (unsigned char)(filesize>>16);
-    bmpfileheader[ 5] = (unsigned char)(filesize>>24);
+    bmpfileheader[2] = (unsigned char)(filesize);
+    bmpfileheader[3] = (unsigned char)(filesize>>8);
+    bmpfileheader[4] = (unsigned char)(filesize>>16);
+    bmpfileheader[5] = (unsigned char)(filesize>>24);
 
-    bmpinfoheader[ 4] = (unsigned char)(w);
-    bmpinfoheader[ 5] = (unsigned char)(w>>8);
-    bmpinfoheader[ 6] = (unsigned char)(w>>16);
-    bmpinfoheader[ 7] = (unsigned char)(w>>24);
+    bmpinfoheader[4] = (unsigned char)(w);
+    bmpinfoheader[5] = (unsigned char)(w>>8);
+    bmpinfoheader[6] = (unsigned char)(w>>16);
+    bmpinfoheader[7] = (unsigned char)(w>>24);
 
-    bmpinfoheader[ 8] = (unsigned char)(h);
-    bmpinfoheader[ 9] = (unsigned char)(h>>8);
-    bmpinfoheader[ 10] = (unsigned char)(h>>16);
-    bmpinfoheader[ 11] = (unsigned char)(h>>24);
+    bmpinfoheader[8] = (unsigned char)(h);
+    bmpinfoheader[9] = (unsigned char)(h>>8);
+    bmpinfoheader[10] = (unsigned char)(h>>16);
+    bmpinfoheader[11] = (unsigned char)(h>>24);
 
     bmpinfoheader[21] = (unsigned char)(s);
     bmpinfoheader[22] = (unsigned char)(s>>8);
@@ -93,10 +101,10 @@ void savebmp (const char *filename, int w, int h, RGBType *data) {
     bmpinfoheader[31] = (unsigned char)(ppm>>16);
     bmpinfoheader[32] = (unsigned char)(ppm>>24);
 
-    f = fopen(filename,"wb");
+    f = fopen(filename, "wb");
 
-    fwrite(bmpfileheader,1,14,f);
-    fwrite(bmpinfoheader,1,40,f);
+    fwrite(bmpfileheader, 1, 14, f);
+    fwrite(bmpinfoheader, 1, 40, f);
 
     for (int i = 0; i < k; i++) {
         RGBType rgb = data[i];
@@ -107,15 +115,17 @@ void savebmp (const char *filename, int w, int h, RGBType *data) {
 
         unsigned char color[3] = {(int)floor(blue),(int)floor(green),(int)floor(red)};
 
-        fwrite(color,1,3,f);
+        fwrite(color, 1, 3, f);
     }
 
     fclose(f);
 }
 
 /**
- * Gets an array of all objects that a ray intersects and finds the winning one's index.
- * The array of object_intersections should be guaranteed to be positive. ( > accuracy )
+ * Gets an array of all objects that a ray intersects
+ * and finds the winning one's index and distance from the camera.
+ * The array of object_intersections should be guaranteed
+ * to be a positive distance ( > ACCURACY ) away from the camera.
  */
 IndexedDouble winningObjectMultiplier(vector<IndexedDouble> object_intersections) {
     // prevent unnessecary calculations
@@ -144,7 +154,7 @@ IndexedDouble winningObjectMultiplier(vector<IndexedDouble> object_intersections
 }
 
 RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, vector<Object*> scene_objects,
-                 int index_of_winning_object, double accuracy, double ambientlight, vector<Source*> light_sources, int recursion_depth){
+                 int index_of_winning_object, vector<Source*> light_sources, int recursion_depth){
     Object* winning_object = scene_objects.at(index_of_winning_object);
     Vect winning_object_normal = winning_object->getNormalAt(intersection_position);
     Color winning_object_color = winning_object->getColor();
@@ -167,14 +177,14 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
         }
     }
 
-    RGBType final_color = winning_object_color.getDiffuse() * ambientlight;
+    RGBType final_color = winning_object_color.getDiffuse() * AMBIENTLIGHT;
 
     // Reflections
     if (recursion_depth < MAXDEPTH && winning_object_color.getSpecial() > 0 && winning_object_color.getSpecial() <= 1) {
         // reflection from object with specular intensity
-        double dot1 = winning_object_normal.dot(intersecting_ray_direction.negative());
-        Vect scaled1 = winning_object_normal.mult(dot1);
-        Vect add1 = scaled1.add(intersecting_ray_direction);
+        double incidence_angle = winning_object_normal.dot(intersecting_ray_direction.negative());
+        Vect scaled_normal = winning_object_normal.mult(incidence_angle);
+        Vect add1 = scaled_normal.add(intersecting_ray_direction);
         Vect scaled2 = add1.mult(2);
         Vect add2 = intersecting_ray_direction.negative().add(scaled2);
         Vect reflection_direction = add2.normalise();
@@ -188,7 +198,7 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
 
         for (int reflection_index = 0; reflection_index < scene_objects.size() ; reflection_index++) {
             reflection_multiplier.value = scene_objects.at(reflection_index)->findIntersection(reflection_ray);
-            if (reflection_multiplier.value > accuracy) {
+            if (reflection_multiplier.value > ACCURACY) {
                 reflection_multiplier.index = reflection_index;
                 reflection_intersections.push_back(reflection_multiplier);
             }
@@ -208,8 +218,6 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
                                                                reflection_intersection_ray_direction,
                                                                scene_objects,
                                                                winning_object_with_reflection_multiplier.index,
-                                                               accuracy,
-                                                               ambientlight,
                                                                light_sources,
                                                                recursion_depth + 1
                                                               );
@@ -241,7 +249,7 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
             }
 
             for (int c = 0; c < secondary_intersections.size(); c++) {
-                if (secondary_intersections.at(c) > accuracy) {
+                if (secondary_intersections.at(c) > ACCURACY) {
                     if (secondary_intersections.at(c) <= distance_to_light_magnitude) {
                         shadowed = true;
                     }
@@ -268,6 +276,7 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
                 }
             }
         }
+    // End of processing scene light
     }
 
     return final_color.clip();
@@ -275,11 +284,7 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
 
 RGBType* raytrace (vector<Source*> light_sources, vector<Object*> scene_objects) {
     int n = WIDTH*HEIGHT;
-    int aadepth = AADEPTH; // Anti-aliasing depth
-    double aathreshold = 0.1;
     double aspectratio = (double) WIDTH / (double) HEIGHT;
-    double ambientlight = 0.2;
-    double accuracy = 0.000001;
 
 
     RGBType *pixels = new RGBType[n];
@@ -287,9 +292,9 @@ RGBType* raytrace (vector<Source*> light_sources, vector<Object*> scene_objects)
     double xamnt, yamnt;
     // Anti-aliasing
     // Start with blank pixels
-    double tempRed[aadepth*aadepth];
-    double tempGreen[aadepth*aadepth];
-    double tempBlue[aadepth*aadepth];
+    double tempRed[AADEPTH*AADEPTH];
+    double tempGreen[AADEPTH*AADEPTH];
+    double tempBlue[AADEPTH*AADEPTH];
 
     // pixel main loop
     for (int x = 0; x < WIDTH; x++) {
@@ -297,15 +302,15 @@ RGBType* raytrace (vector<Source*> light_sources, vector<Object*> scene_objects)
             thisone = y*WIDTH + x;
 
             // Anti-aliasing loop
-            for (int aax = 0; aax < aadepth; aax++) {
-                for (int aay = 0; aay < aadepth; aay++) {
-                    aa_index = aay*aadepth + aax;
+            for (int aax = 0; aax < AADEPTH; aax++) {
+                for (int aay = 0; aay < AADEPTH; aay++) {
+                    aa_index = aay*AADEPTH + aax;
                     srand(time(0));
 
                     // Create the ray from the camera to this pixel
 
-                    double offset = (aadepth == 1 ? 0.5 : (double) aax/((double) aadepth - 1));
-                    // anti-aliasing
+                    double offset = (AADEPTH == 1 ? 0.5 : (double) aax/((double) AADEPTH - 1));
+                    // Anti-aliasing
                     if (WIDTH > HEIGHT) {
                         // the image is wider than it is tall
                         xamnt = (((x + offset)/WIDTH)*aspectratio - ((WIDTH-HEIGHT)/ (double) HEIGHT));
@@ -333,7 +338,7 @@ RGBType* raytrace (vector<Source*> light_sources, vector<Object*> scene_objects)
 
                     for (int index = 0; index < scene_objects.size(); index++) {
                         intersection_multiplier.value = scene_objects.at(index)->findIntersection(cam_ray);
-                        if (intersection_multiplier.value > accuracy) {
+                        if (intersection_multiplier.value > ACCURACY) {
                             intersection_multiplier.index = index;
                             intersections.push_back(intersection_multiplier);
                         }
@@ -354,15 +359,13 @@ RGBType* raytrace (vector<Source*> light_sources, vector<Object*> scene_objects)
                                                                intersecting_ray_direction,
                                                                scene_objects,
                                                                winning_object_multiplier.index,
-                                                               accuracy,
-                                                               ambientlight,
                                                                light_sources,
                                                                0);
                         tempRed[aa_index] = current_obj_color.r;
                         tempGreen[aa_index] = current_obj_color.g;
                         tempBlue[aa_index] = current_obj_color.b;
                     }
-                // end of Anti-aliasing loop
+                // End of Anti-aliasing loop
                 }
             }
 
@@ -371,21 +374,21 @@ RGBType* raytrace (vector<Source*> light_sources, vector<Object*> scene_objects)
             double totalGreen = 0;
             double totalBlue = 0;
 
-            for (int iRed = 0; iRed < aadepth*aadepth; iRed++) {
+            for (int iRed = 0; iRed < AADEPTH*AADEPTH; iRed++) {
                 totalRed += tempRed[iRed];
             }
 
-            for (int iGreen = 0; iGreen < aadepth*aadepth; iGreen++) {
+            for (int iGreen = 0; iGreen < AADEPTH*AADEPTH; iGreen++) {
                 totalGreen += tempGreen[iGreen];
             }
 
-            for (int iBlue = 0; iBlue < aadepth*aadepth; iBlue++) {
+            for (int iBlue = 0; iBlue < AADEPTH*AADEPTH; iBlue++) {
                 totalBlue += tempBlue[iBlue];
             }
 
-            double avgRed = totalRed/(aadepth*aadepth);
-            double avgGreen = totalGreen/(aadepth*aadepth);
-            double avgBlue = totalBlue/(aadepth*aadepth);
+            double avgRed = totalRed/(AADEPTH*AADEPTH);
+            double avgGreen = totalGreen/(AADEPTH*AADEPTH);
+            double avgBlue = totalBlue/(AADEPTH*AADEPTH);
 
             pixels[thisone].r = avgRed;
             pixels[thisone].g = avgGreen;
@@ -440,6 +443,10 @@ void readSceneFile(int argc, char* argv[], vector<Source*> *light_sources,
         }
         if ( op.compare("aadepth") == 0) {
             ss >> AADEPTH;
+            continue;
+        }
+        if ( op.compare("accuracy") == 0) {
+            ss >> ACCURACY;
             continue;
         }
         if ( op.compare("camera") == 0 ) {
