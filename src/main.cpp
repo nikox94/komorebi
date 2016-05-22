@@ -153,8 +153,8 @@ IndexedDouble winningObjectMultiplier(vector<IndexedDouble> object_intersections
     return object_intersections.at(internal_index_of_min_val);
 }
 
-RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, vector<Object*> scene_objects,
-                 int index_of_winning_object, vector<Source*> light_sources, int recursion_depth){
+RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, vector<Object*> &scene_objects,
+                 int index_of_winning_object, vector<Source*> &light_sources, int recursion_depth){
     Object* winning_object = scene_objects.at(index_of_winning_object);
     Vect winning_object_normal = winning_object->getNormalAt(intersection_position);
     Color winning_object_color = winning_object->getColor();
@@ -219,8 +219,7 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
                                                                scene_objects,
                                                                winning_object_with_reflection_multiplier.index,
                                                                light_sources,
-                                                               recursion_depth + 1
-                                                              );
+                                                               recursion_depth + 1);
             final_color += reflection_intersection_color * winning_object_color.getSpecial();
         }
     // End of reflections
@@ -282,57 +281,56 @@ RGBType getColorAt(Vect intersection_position, Vect intersecting_ray_direction, 
     return final_color.clip();
 }
 
-RGBType* raytrace (vector<Source*> light_sources, vector<Object*> scene_objects) {
+RGBType* raytrace (vector<Source*> &light_sources, vector<Object*> &scene_objects) {
     int n = WIDTH*HEIGHT;
     double aspectratio = (double) WIDTH / (double) HEIGHT;
 
-
     RGBType *pixels = new RGBType[n];
-    int thisone, aa_index;
+    int current_pixel_index;
+    int aa_subpixel_index;
+    // Raycasting displacement amounts
     double xamnt, yamnt;
-    // Anti-aliasing
-    // Start with blank pixels
+    // Anti-aliasing subpixels arrays
     double tempRed[AADEPTH*AADEPTH];
     double tempGreen[AADEPTH*AADEPTH];
     double tempBlue[AADEPTH*AADEPTH];
 
-    // pixel main loop
+    // Pixel main loop
     for (int x = 0; x < WIDTH; x++) {
         for (int y = 0; y < HEIGHT; y++) {
-            thisone = y*WIDTH + x;
+            current_pixel_index = y*WIDTH + x;
 
             // Anti-aliasing loop
             for (int aax = 0; aax < AADEPTH; aax++) {
                 for (int aay = 0; aay < AADEPTH; aay++) {
-                    aa_index = aay*AADEPTH + aax;
+                    aa_subpixel_index = aay*AADEPTH + aax;
                     srand(time(0));
 
-                    // Create the ray from the camera to this pixel
-
+                    // Cast ray from the camera through this pixel:
+                    // 1. Calculate displacements in the x and y direction.
                     double offset = (AADEPTH == 1 ? 0.5 : (double) aax/((double) AADEPTH - 1));
-                    // Anti-aliasing
                     if (WIDTH > HEIGHT) {
-                        // the image is wider than it is tall
-                        xamnt = (((x + offset)/WIDTH)*aspectratio - ((WIDTH-HEIGHT)/ (double) HEIGHT));
+                        // Image is wider
+                        xamnt = (((x + offset)/WIDTH)*aspectratio - ((WIDTH - HEIGHT)/(double) HEIGHT));
                         yamnt = ((HEIGHT - y) + offset)/HEIGHT;
                     } else if (HEIGHT > WIDTH) {
-                        // the image is taller than it is wide
-                        xamnt = (x+offset)/WIDTH;
-                        yamnt = (((HEIGHT - y) + offset)/HEIGHT)/aspectratio - ((HEIGHT - WIDTH)/(double) WIDTH);
+                        // Image is taller
+                        xamnt = (x + offset)/WIDTH;
+                        yamnt = ((HEIGHT - y) + offset)/(HEIGHT * aspectratio) - ((HEIGHT - WIDTH)/(double) WIDTH);
                     } else {
-                        // the image is square
-                        xamnt = (x+offset)/WIDTH;
+                        // Image is square
+                        xamnt = (x + offset)/WIDTH;
                         yamnt = ((HEIGHT - y) + offset)/HEIGHT;
                     }
-
+                    // 2. Cast the ray
                     Vect cam_ray_origin = SCENE_CAM.getCameraPosition();
                     Vect cam_ray_direction = SCENE_CAM.getCameraDirection()
                                                         .add(SCENE_CAM.getCameraRight().mult(xamnt - 0.5)
                                                         .add(SCENE_CAM.getCameraDown().mult(yamnt - 0.5)))
                                                         .normalise();
-                    Ray cam_ray (cam_ray_origin, cam_ray_direction);
+                    Ray cam_ray(cam_ray_origin, cam_ray_direction);
 
-                    // Calculate all object intersections with cam_ray
+                    // 3. Calculate all object intersections with the cast ray
                     vector<IndexedDouble> intersections;
                     IndexedDouble intersection_multiplier;
 
@@ -344,32 +342,33 @@ RGBType* raytrace (vector<Source*> light_sources, vector<Object*> scene_objects)
                         }
                     }
 
+                    // 4. Calculate pixel color
                     if(intersections.size() == 0) {
-                        tempRed[aa_index] = 0.0;
-                        tempGreen[aa_index] = 0.0;
-                        tempBlue[aa_index] = 0.0;
+                        tempRed[aa_subpixel_index] = 0.0;
+                        tempGreen[aa_subpixel_index] = 0.0;
+                        tempBlue[aa_subpixel_index] = 0.0;
                     } else {
                         IndexedDouble winning_object_multiplier = winningObjectMultiplier(intersections);
 
-                        // determine the position and direction vectors at intersection
-                        Vect intersection_position = cam_ray_origin.add(cam_ray_direction.mult(winning_object_multiplier.value));
-                        Vect intersecting_ray_direction = cam_ray_direction;
+                        Vect intersection_position = cam_ray_origin.add(
+                                                        cam_ray_direction.mult(
+                                                            winning_object_multiplier.value));
 
                         RGBType current_obj_color = getColorAt(intersection_position,
-                                                               intersecting_ray_direction,
+                                                               cam_ray_direction,
                                                                scene_objects,
                                                                winning_object_multiplier.index,
                                                                light_sources,
                                                                0);
-                        tempRed[aa_index] = current_obj_color.r;
-                        tempGreen[aa_index] = current_obj_color.g;
-                        tempBlue[aa_index] = current_obj_color.b;
+                        tempRed[aa_subpixel_index] = current_obj_color.r;
+                        tempGreen[aa_subpixel_index] = current_obj_color.g;
+                        tempBlue[aa_subpixel_index] = current_obj_color.b;
                     }
                 // End of Anti-aliasing loop
                 }
             }
 
-            // average the pixel color
+            // Average the pixel color
             double totalRed = 0;
             double totalGreen = 0;
             double totalBlue = 0;
@@ -390,20 +389,24 @@ RGBType* raytrace (vector<Source*> light_sources, vector<Object*> scene_objects)
             double avgGreen = totalGreen/(AADEPTH*AADEPTH);
             double avgBlue = totalBlue/(AADEPTH*AADEPTH);
 
-            pixels[thisone].r = avgRed;
-            pixels[thisone].g = avgGreen;
-            pixels[thisone].b = avgBlue;
-            // end of pixel loop
+            pixels[current_pixel_index].r = avgRed;
+            pixels[current_pixel_index].g = avgGreen;
+            pixels[current_pixel_index].b = avgBlue;
+        // End of pixel loop
         }
     }
     return pixels;
 }
 
-void readSceneFile(int argc, char* argv[], vector<Source*> *light_sources,
-                   vector<Object*> *scene_objects, vector<Vect*> *vertices) {
+void readSceneFile(int argc, char* argv[], vector<Source*> &light_sources,
+                   vector<Object*> &scene_objects, vector<Vect*> &vertices) {
     // Read input file with instructions
-    if (argc != 2) {
-        cout << "Please specify the scene file to read!" << endl;
+    if (argc < 2) {
+        cout << "Please specify the filename of the scene file to read!" << endl;
+        exit(1);
+    } else if (argc > 2) {
+        cout << "Too many arguments given. Please only specify the filename\
+        of the scene-file to read." << endl;
         exit(1);
     }
 
@@ -411,13 +414,14 @@ void readSceneFile(int argc, char* argv[], vector<Source*> *light_sources,
     sceneFile.open(argv[1]);
 
     if (!sceneFile.is_open()) {
-        cout << "Could not open file " << argv[1] << endl;
+        cout << "Could not open scene file." << argv[1] << endl;
         exit(1);
     }
 
     string line;
-    while ( getline (sceneFile, line) ) {
-        if ( line[0] == '#' || line[0] == '\0') continue;
+    while (getline (sceneFile, line)) {
+        if (line[0] == '#' || line[0] == '\0')
+            continue;
 
         stringstream ss (stringstream::out | stringstream::in);
         ss.str(line);
@@ -425,31 +429,31 @@ void readSceneFile(int argc, char* argv[], vector<Source*> *light_sources,
         ss >> op;
 
         // GENERAL SCENE
-        if ( op.compare("size") == 0) {
+        if (op.compare("size") == 0) {
             ss >> WIDTH >> HEIGHT;
             continue;
         }
-        if ( op.compare("dpi") == 0) {
+        if (op.compare("dpi") == 0) {
             ss >> DPI;
             continue;
         }
-        if ( op.compare("output") == 0) {
+        if (op.compare("output") == 0) {
             ss >> OUTFILE;
             continue;
         }
-        if ( op.compare("maxdepth") == 0) {
+        if (op.compare("maxdepth") == 0) {
             ss >> MAXDEPTH;
             continue;
         }
-        if ( op.compare("aadepth") == 0) {
+        if (op.compare("aadepth") == 0) {
             ss >> AADEPTH;
             continue;
         }
-        if ( op.compare("accuracy") == 0) {
+        if (op.compare("accuracy") == 0) {
             ss >> ACCURACY;
             continue;
         }
-        if ( op.compare("camera") == 0 ) {
+        if (op.compare("camera") == 0) {
             double x, y, z;
             ss >> x >> y >> z;
             LOOKFROM = Vect(x, y, z);
@@ -469,60 +473,61 @@ void readSceneFile(int argc, char* argv[], vector<Source*> *light_sources,
         // END GENERAL SCENE
 
         // LIGHTS
-        if ( op.compare("point") == 0 ) {
+        if (op.compare("point") == 0) {
             double x, y, z, r, g, b;
             ss >> x >> y >> z >> r >> g >> b;
             Color color = Color(r, g, b, 0.0);
             Vect position = Vect(x, y, z);
             Light* light = new Light(position, color);
-            light_sources->push_back(dynamic_cast<Source*>(light));
+            light_sources.push_back(dynamic_cast<Source*>(light));
             continue;
         }
-        if ( op.compare("ambient") == 0 ) {
-            RGBType ambient;
-            ss >> ambient.r >> ambient.g >> ambient.b;
+        if (op.compare("ambient") == 0) {
+            ss >> AMBIENTLIGHT;
             continue;
         }
         // END LIGHTS
 
         // SCENE OBJECTS
-        if ( op.compare("sphere") == 0 ) {
+        if (op.compare("sphere") == 0) {
             double x, y, z, radius;
             ss >> x >> y >> z >> radius;
-            Sphere* sphere = new Sphere( Vect(x, y, z),
-                                         radius,
-                                         CURRENT_COLOR);
-            scene_objects->push_back(dynamic_cast<Object*>(sphere));
+            Sphere* sphere = new Sphere(Vect(x, y, z),
+                                        radius,
+                                        CURRENT_COLOR);
+            scene_objects.push_back(dynamic_cast<Object*>(sphere));
             continue;
         }
-        if ( op.compare("vertex") == 0 ) {
+        if (op.compare("vertex") == 0) {
             double x, y, z;
             ss >> x >> y >> z;
             Vect* vect = new Vect(x, y, z);
-            vertices->push_back(vect);
+            vertices.push_back(vect);
             continue;
         }
-        if ( op.compare("tri") == 0 ) {
+        if (op.compare("tri") == 0) {
             int v1, v2, v3;
             ss >> v1 >> v2 >> v3;
-            Triangle* tri = new Triangle(*vertices->at(v1),
-                                         *vertices->at(v2),
-                                         *vertices->at(v3),
+            Triangle* tri = new Triangle(*vertices.at(v1), // Copy of each vertex
+                                         *vertices.at(v2),
+                                         *vertices.at(v3),
                                          CURRENT_COLOR);
-            scene_objects->push_back(dynamic_cast<Object*>(tri));
+            scene_objects.push_back(dynamic_cast<Object*>(tri));
             continue;
         }
-        if ( op.compare("plane") == 0 ) {
+        if (op.compare("plane") == 0) {
             int nx, ny, nz, dist;
             ss >> nx >> ny >> nz >> dist;
-            Plane* plane = new Plane(Vect(nx, ny, nz), dist, CURRENT_COLOR);
-            scene_objects->push_back(dynamic_cast<Object*>(plane));
+            Plane* plane = new Plane(Vect(nx, ny, nz),
+                                     dist,
+                                     CURRENT_COLOR);
+            scene_objects.push_back(dynamic_cast<Object*>(plane));
             continue;
         }
         // END SCENE OBJECTS
 
-        // COLOUR
-        if ( op.compare("diffuse") == 0 ) {
+        // COLOR
+        if (op.compare("diffuse") == 0) {
             RGBType diffuse;
             ss >> diffuse.r >> diffuse.g >> diffuse.b;
             CURRENT_COLOR.setRed(diffuse.r);
@@ -530,13 +535,13 @@ void readSceneFile(int argc, char* argv[], vector<Source*> *light_sources,
             CURRENT_COLOR.setBlue(diffuse.b);
             continue;
         }
-        if ( op.compare("shininess") == 0 ) {
+        if (op.compare("shininess") == 0) {
             double shine;
             ss >> shine;
             CURRENT_COLOR.setShine(shine);
             continue;
         }
-        if ( op.compare("special") == 0 ) {
+        if (op.compare("special") == 0) {
             double special;
             ss >> special;
             CURRENT_COLOR.setSpecial(special);
@@ -548,13 +553,27 @@ void readSceneFile(int argc, char* argv[], vector<Source*> *light_sources,
     sceneFile.close();
 }
 
+void freeMemory(vector<Source*> &light_sources, vector<Object*> &scene_objects, vector<Vect*> &vertices) {
+    for(int i = 0; i < light_sources.size() ; i++) {
+        delete light_sources.at(i);
+    }
+
+    for(int i = 0; i < scene_objects.size() ; i++) {
+        delete scene_objects.at(i);
+    }
+
+    for(int i = 0; i < vertices.size() ; i++) {
+        delete vertices.at(i);
+    }
+}
+
 
 int main (int argc, char *argv[]) {
     cout << "reading input file..." << endl;
     vector<Source*> light_sources;
     vector<Object*> scene_objects;
     vector<Vect*> vertices;
-    readSceneFile(argc, argv, &light_sources, &scene_objects, &vertices);
+    readSceneFile(argc, argv, light_sources, scene_objects, vertices);
 
     cout << "rendering..." << endl;
 
@@ -565,6 +584,7 @@ int main (int argc, char *argv[]) {
     RGBType *pixels = raytrace(light_sources, scene_objects);
     savebmp(OUTFILE.c_str(), WIDTH, HEIGHT, pixels);
 
+    freeMemory(light_sources, scene_objects, vertices);
     delete pixels;
 
     // Calculate the time for rendering

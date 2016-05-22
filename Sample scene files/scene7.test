@@ -46116,6 +46116,11 @@ vertex  2.0404 0.5499 0.8316
 vertex  2.3911 1.1486 1.8560
 vertex  3.5024 3.1171 1.3077
 vertex  3.5504 3.1157 1.3106
+diffuse 0.4 0.1 0.1
+ambient 0.0 0.0 0.0
+point 0 20 20 1 1 1
+shininess 20
+specular 0.3 0.3
 vertex  3.4719 3.1078 1.3154
 vertex  1.4720 1.5164 0.0086
 vertex  1.4765 1.4697 0.0098
@@ -50015,7 +50020,7 @@ vertex  5.0142 3.9242 0.2975
 vertex  5.0140 3.9334 0.2939
 vertex  5.0126 3.9222 0.2961
 vertex  -4.0968 7.6150 1.1201
-# 50000 vertexertices
+# 50000 vertices
 
 pushTransform
 translate 0 -5 0
@@ -51943,6 +51948,11 @@ tri 5314 5315 5316
 tri 5317 5318 5315 
 tri 5319 5320 5321 
 tri 5322 5323 5324 
+diffuse 0.4 0.1 0.1
+ambient 0.0 0.0 0.0
+point 0 20 20 1 1 1
+shininess 20
+specular 0.3 0.3
 tri 5325 5326 5327 
 tri 5328 5329 5330 
 tri 5331 5332 5333 

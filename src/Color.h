@@ -8,7 +8,7 @@ class Color {
     // This is the diffuse colour of an object
     RGBType diffuse;
     // The special number is... special... it acts as a specularity magnitude if between 0.0 and 1.0
-    // And is used for special effects if above that value
+    // and is used for special effects if above that value (see checkerboard pattern for an example)
     double special;
     // Shine
     double shine;
